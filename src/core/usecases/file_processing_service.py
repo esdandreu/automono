@@ -66,11 +66,73 @@ class FileProcessingService:
                             error=str(e))
             raise ValueError(f"Failed to extract metadata from PDF: {e}")
     
-    def _extract_text_from_pdf(self, invoice: Invoice) -> str:
-        """Extract text content from a PDF file."""
+    def extract_metadata_from_pdf_file(self, file_path: str) -> Invoice:
+        """
+        Extract metadata from a PDF file and create an Invoice object.
+        
+        Args:
+            file_path: Path to the PDF file
+            
+        Returns:
+            Invoice object with extracted information
+            
+        Raises:
+            ValueError: If the PDF cannot be processed or metadata cannot be extracted
+        """
+        try:
+            # Read the PDF file
+            with open(file_path, 'rb') as f:
+                content = f.read()
+            
+            # Extract text from PDF
+            text = self._extract_text_from_pdf_file(content)
+            
+            # Extract invoice date
+            invoice_date = self._extract_invoice_date(text)
+            
+            # Extract cost amounts
+            cost_euros, iva_euros = self._extract_amounts(text)
+            
+            # Calculate file hashes
+            import hashlib
+            hash_md5 = hashlib.md5(content).hexdigest()
+            hash_sha256 = hashlib.sha256(content).hexdigest()
+            
+            # Create invoice object
+            from pathlib import Path
+            file_name = Path(file_path).name
+            
+            invoice = Invoice(
+                invoice_date=invoice_date,
+                concept="Electricity",  # Default value, will be overridden by caller
+                type="Electricity",     # Default value, will be overridden by caller
+                cost_euros=cost_euros,
+                iva_euros=iva_euros,
+                deductible_percentage=0,  # Will be set by the caller
+                file_name=file_name,
+                path=file_path
+            )
+            
+            self.logger.info("Successfully extracted metadata from PDF file",
+                           file_path=file_path,
+                           file_name=file_name,
+                           invoice_date=invoice_date.isoformat(),
+                           cost_euros=float(cost_euros),
+                           iva_euros=float(iva_euros))
+            
+            return invoice
+            
+        except Exception as e:
+            self.logger.error("Failed to extract metadata from PDF file",
+                            file_path=file_path,
+                            error=str(e))
+            raise ValueError(f"Failed to extract metadata from PDF file: {e}")
+    
+    def _extract_text_from_pdf_file(self, content: bytes) -> str:
+        """Extract text content from PDF bytes."""
         try:
             # Try with pdfplumber first (better for complex layouts)
-            with pdfplumber.open(io.BytesIO(invoice.content)) as pdf:
+            with pdfplumber.open(io.BytesIO(content)) as pdf:
                 text = ""
                 for page in pdf.pages:
                     page_text = page.extract_text()
@@ -81,7 +143,33 @@ class FileProcessingService:
                     return text
             
             # Fallback to PyPDF2
-            pdf_reader = PyPDF2.PdfReader(io.BytesIO(invoice.content))
+            pdf_reader = PyPDF2.PdfReader(io.BytesIO(content))
+            text = ""
+            for page in pdf_reader.pages:
+                text += page.extract_text() + "\n"
+            
+            return text
+            
+        except Exception as e:
+            self.logger.error("Failed to extract text from PDF", error=str(e))
+            raise ValueError(f"Failed to extract text from PDF: {e}")
+    
+    def _extract_text_from_pdf(self, invoice: Invoice) -> str:
+        """Extract text content from a PDF file."""
+        try:
+            # Try with pdfplumber first (better for complex layouts)
+            with pdfplumber.open(invoice.path) as pdf:
+                text = ""
+                for page in pdf.pages:
+                    page_text = page.extract_text()
+                    if page_text:
+                        text += page_text + "\n"
+                
+                if text.strip():
+                    return text
+            
+            # Fallback to PyPDF2
+            pdf_reader = PyPDF2.PdfReader(invoice.path)
             text = ""
             for page in pdf_reader.pages:
                 text += page.extract_text() + "\n"
@@ -174,12 +262,13 @@ class FileProcessingService:
         """Validate that the file is a valid PDF."""
         try:
             # Check if it's a PDF by trying to read it
-            pdf_reader = PyPDF2.PdfReader(io.BytesIO(invoice.content))
+            pdf_reader = PyPDF2.PdfReader(invoice.path)
             if len(pdf_reader.pages) == 0:
                 return False
             
             # Check file size (should be reasonable)
-            if len(invoice.content) < 1000:  # Less than 1KB is suspicious
+            file_size = Path(invoice.path).stat().st_size
+            if file_size < 1000:  # Less than 1KB is suspicious
                 return False
             
             return True
