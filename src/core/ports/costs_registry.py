@@ -8,7 +8,7 @@ from datetime import datetime
 from typing import List, Protocol, runtime_checkable
 
 from ..domain.archive_result import ArchiveResult
-from ..domain.invoice_metadata import InvoiceMetadata
+from ..domain.invoice import Invoice
 from ..domain.registered_invoice import RegisteredInvoice
 
 
@@ -33,12 +33,12 @@ class CostsRegistry(Protocol):
         """
         ...
     
-    def register_invoice(self, invoice: InvoiceMetadata, archive_results: List[ArchiveResult]) -> bool:
+    def register_invoice(self, invoice: Invoice, archive_results: List[ArchiveResult]) -> bool:
         """
         Register a new invoice with its archive results.
         
         Args:
-            invoice: The invoice metadata to register
+            invoice: The invoice to register (containing both metadata and file content)
             archive_results: List of archive results from storage services
             
         Returns:

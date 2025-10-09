@@ -7,7 +7,7 @@ Fetches electricity invoices from Repsol customer portal.
 import re
 from datetime import datetime, timedelta
 from decimal import Decimal
-from typing import List, Optional, Dict, Any, Final
+from typing import Iterator, List, Optional, Dict, Any, Final
 
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support import expected_conditions as EC
@@ -15,8 +15,7 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.common.exceptions import TimeoutException, NoSuchElementException
 from selenium.webdriver.remote.webelement import WebElement
 
-from src.core.domain.invoice_file import InvoiceFile
-from src.core.domain.invoice_metadata import InvoiceMetadata
+from src.core.domain.invoice import Invoice
 from src.core.ports.costs_source import CostsSource
 from src.infrastructure.browser.selenium_service import SeleniumService
 from src.infrastructure.logging.logger import get_logger
@@ -44,18 +43,15 @@ class RepsolCostsSourceAdapter(CostsSource):
         self.logger = logger
         self.driver = None
     
-    def get_available_invoices(self, since_date: datetime) -> List[InvoiceMetadata]:
+    def __iter__(self) -> Iterator[Invoice]:
         """
-        Get available invoices from Repsol since the specified date.
+        Iterate over Repsol invoices from newest to oldest.
         
-        Args:
-            since_date: Only return invoices from this date onwards
-            
-        Returns:
-            List of invoice metadata objects
+        Yields:
+            Invoice objects with complete metadata and file content
         """
         try:
-            self.logger.info("Getting available Repsol invoices", since_date=since_date.isoformat())
+            self.logger.info("Starting Repsol invoice iteration")
             
             # Start browser session
             self.driver = self.selenium_service.start()
@@ -67,73 +63,93 @@ class RepsolCostsSourceAdapter(CostsSource):
             self.driver.get(self.INVOICES_URL)
             self.selenium_service.wait_for_element(By.CLASS_NAME, "facturas", timeout=30)
             
-            # Extract invoice metadata from the page
-            invoices = self._extract_invoice_metadata(since_date)
+            # Get invoice metadata and download each one
+            invoice_metadata_list = self._extract_invoice_metadata()
             
-            self.logger.info("Successfully retrieved Repsol invoices", 
-                           count=len(invoices),
-                           since_date=since_date.isoformat())
-            
-            return invoices
+            for metadata in invoice_metadata_list:
+                try:
+                    # Download the invoice file
+                    invoice_file = self._download_invoice_file(metadata)
+                    
+                    # Create unified Invoice object
+                    invoice = Invoice(
+                        # Metadata fields
+                        invoice_date=metadata['date'],
+                        concept=self.CONCEPT,
+                        type=self.TYPE,
+                        cost_euros=metadata['amount'],
+                        iva_euros=metadata['iva'],
+                        deductible_percentage=self.DEDUCTIBLE_PERCENTAGE,
+                        file_name=metadata['filename'],
+                        # File fields
+                        content=invoice_file['content'],
+                        content_type=invoice_file['content_type'],
+                        size=invoice_file['size'],
+                        hash_md5=invoice_file['hash_md5'],
+                        hash_sha256=invoice_file['hash_sha256']
+                    )
+                    
+                    self.logger.info("Successfully processed Repsol invoice",
+                                   file_name=metadata['filename'],
+                                   date=metadata['date'].isoformat())
+                    
+                    yield invoice
+                    
+                except Exception as e:
+                    self.logger.error("Failed to process Repsol invoice",
+                                    file_name=metadata.get('filename', 'unknown'),
+                                    error=str(e))
+                    continue
             
         except Exception as e:
-            self.logger.error("Failed to get Repsol invoices", error=str(e))
+            self.logger.error("Failed to iterate Repsol invoices", error=str(e))
             raise
         finally:
             if self.driver:
                 self.selenium_service.stop()
                 self.driver = None
     
-    def download_invoice(self, invoice_metadata: InvoiceMetadata) -> InvoiceFile:
-        """
-        Download a specific invoice file from Repsol.
-        
-        Args:
-            invoice_metadata: The invoice metadata to download
-            
-        Returns:
-            The downloaded invoice file
-        """
+    def _download_invoice_file(self, metadata: Dict[str, Any]) -> Dict[str, Any]:
+        """Download a specific invoice file and return file data."""
         try:
-            self.logger.info("Downloading Repsol invoice", 
-                           file_name=invoice_metadata.file_name)
-            
-            # Start browser session if not already started
-            if not self.driver:
-                self.driver = self.selenium_service.start()
-                self._login()
-            
-            # Navigate to invoices page
-            self.driver.get(self.INVOICES_URL)
-            self.selenium_service.wait_for_element(By.CLASS_NAME, "facturas", timeout=30)
+            self.logger.info("Downloading Repsol invoice file", 
+                           file_name=metadata['filename'])
             
             # Find and click the download link for this invoice
-            download_link = self._find_download_link(invoice_metadata)
+            download_link = self._find_download_link_by_metadata(metadata)
             if not download_link:
-                raise ValueError(f"Download link not found for invoice {invoice_metadata.file_name}")
+                raise ValueError(f"Download link not found for invoice {metadata['filename']}")
             
             # Click download link
             download_link.click()
             
             # Wait for download to complete
-            downloaded_file = self.selenium_service.wait_for_download(invoice_metadata.file_name)
+            downloaded_file = self.selenium_service.wait_for_download(metadata['filename'])
             
             # Read the downloaded file
             with open(downloaded_file, 'rb') as f:
                 content = f.read()
             
-            # Create InvoiceFile object
-            invoice_file = InvoiceFile.from_content(content, invoice_metadata.file_name)
+            # Calculate hashes
+            import hashlib
+            hash_md5 = hashlib.md5(content).hexdigest()
+            hash_sha256 = hashlib.sha256(content).hexdigest()
             
-            self.logger.info("Successfully downloaded Repsol invoice",
-                           file_name=invoice_metadata.file_name,
+            self.logger.info("Successfully downloaded Repsol invoice file",
+                           file_name=metadata['filename'],
                            size=len(content))
             
-            return invoice_file
+            return {
+                'content': content,
+                'content_type': 'application/pdf',
+                'size': len(content),
+                'hash_md5': hash_md5,
+                'hash_sha256': hash_sha256
+            }
             
         except Exception as e:
-            self.logger.error("Failed to download Repsol invoice",
-                            file_name=invoice_metadata.file_name,
+            self.logger.error("Failed to download Repsol invoice file",
+                            file_name=metadata.get('filename', 'unknown'),
                             error=str(e))
             raise
     
@@ -174,7 +190,7 @@ class RepsolCostsSourceAdapter(CostsSource):
             self.logger.error("Login failed", error=str(e))
             raise
     
-    def _extract_invoice_metadata(self, since_date: datetime) -> List[InvoiceMetadata]:
+    def _extract_invoice_metadata(self) -> List[Dict[str, Any]]:
         """Extract invoice metadata from the invoices page."""
         invoices = []
         
@@ -187,18 +203,8 @@ class RepsolCostsSourceAdapter(CostsSource):
                     # Extract invoice data from row
                     invoice_data = self._parse_invoice_row(row)
                     
-                    if invoice_data and invoice_data['date'] >= since_date:
-                        # Create InvoiceMetadata
-                        metadata = InvoiceMetadata(
-                            invoice_date=invoice_data['date'],
-                            concept=self.CONCEPT,
-                            type=self.TYPE,
-                            cost_euros=invoice_data['amount'],
-                            iva_euros=invoice_data['iva'],
-                            deductible_percentage=self.DEDUCTIBLE_PERCENTAGE,
-                            file_name=invoice_data['filename']
-                        )
-                        invoices.append(metadata)
+                    if invoice_data:
+                        invoices.append(invoice_data)
                         
                 except Exception as e:
                     self.logger.warning("Failed to parse invoice row", error=str(e))
@@ -206,7 +212,7 @@ class RepsolCostsSourceAdapter(CostsSource):
             
             # If no specific rows found, try alternative selectors
             if not invoices:
-                invoices = self._extract_invoices_alternative_method(since_date)
+                invoices = self._extract_invoices_alternative_method()
             
         except Exception as e:
             self.logger.error("Failed to extract invoice metadata", error=str(e))
@@ -246,7 +252,7 @@ class RepsolCostsSourceAdapter(CostsSource):
             self.logger.warning("Failed to parse invoice row", error=str(e))
             return None
     
-    def _extract_invoices_alternative_method(self, since_date: datetime) -> List[InvoiceMetadata]:
+    def _extract_invoices_alternative_method(self) -> List[Dict[str, Any]]:
         """Alternative method to extract invoices if primary method fails."""
         invoices = []
         
@@ -266,18 +272,14 @@ class RepsolCostsSourceAdapter(CostsSource):
                         day, month, year = date_match.groups()
                         invoice_date = datetime(int(year), int(month), int(day))
                         
-                        if invoice_date >= since_date:
-                            # Create basic metadata (amounts will be extracted from PDF later)
-                            metadata = InvoiceMetadata(
-                                invoice_date=invoice_date,
-                                concept=self.CONCEPT,
-                                type=self.TYPE,
-                                cost_euros=Decimal("0.00"),  # Will be extracted from PDF
-                                iva_euros=Decimal("0.00"),   # Will be extracted from PDF
-                                deductible_percentage=self.DEDUCTIBLE_PERCENTAGE,
-                                file_name=f"repsol_{invoice_date.strftime('%Y%m%d')}.pdf"
-                            )
-                            invoices.append(metadata)
+                        # Create basic metadata (amounts will be extracted from PDF later)
+                        invoice_data = {
+                            'date': invoice_date,
+                            'amount': Decimal("0.00"),  # Will be extracted from PDF
+                            'iva': Decimal("0.00"),   # Will be extracted from PDF
+                            'filename': f"repsol_{invoice_date.strftime('%Y%m%d')}.pdf"
+                        }
+                        invoices.append(invoice_data)
                             
                 except Exception as e:
                     self.logger.warning("Failed to parse alternative invoice link", error=str(e))
@@ -288,7 +290,7 @@ class RepsolCostsSourceAdapter(CostsSource):
         
         return invoices
     
-    def _find_download_link(self, invoice_metadata: InvoiceMetadata) -> Optional[WebElement]:
+    def _find_download_link_by_metadata(self, metadata: Dict[str, Any]) -> Optional[WebElement]:
         """Find the download link for a specific invoice."""
         try:
             # Look for download links that match the invoice
@@ -299,9 +301,9 @@ class RepsolCostsSourceAdapter(CostsSource):
                 href = link.get_attribute('href', '').lower()
                 
                 # Check if this link matches our invoice
-                if (invoice_metadata.file_name.lower() in link_text or 
-                    invoice_metadata.file_name.lower() in href or
-                    str(invoice_metadata.invoice_date.month) in link_text):
+                if (metadata['filename'].lower() in link_text or 
+                    metadata['filename'].lower() in href or
+                    str(metadata['date'].month) in link_text):
                     return link
             
             # If no specific link found, return the first download link

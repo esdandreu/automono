@@ -7,21 +7,19 @@ Defines the contract for storing invoice files in cloud storage.
 from typing import Protocol, runtime_checkable
 
 from ..domain.archive_result import ArchiveResult
-from ..domain.invoice_file import InvoiceFile
-from ..domain.invoice_metadata import InvoiceMetadata
+from ..domain.invoice import Invoice
 
 
 @runtime_checkable
 class InvoiceArchive(Protocol):
     """Protocol interface for storing invoice files in cloud storage."""
     
-    def archive_invoice(self, invoice_file: InvoiceFile, metadata: InvoiceMetadata) -> ArchiveResult:
+    def archive_invoice(self, invoice: Invoice) -> ArchiveResult:
         """
-        Store an invoice file in the cloud storage.
+        Store an invoice in the cloud storage.
         
         Args:
-            invoice_file: The invoice file to store
-            metadata: The invoice metadata
+            invoice: The invoice to store (containing both metadata and file content)
             
         Returns:
             Archive result containing the archive ID and file URL

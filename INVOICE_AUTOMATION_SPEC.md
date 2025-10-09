@@ -11,23 +11,21 @@ The system follows the **Adapters and Ports** (Hexagonal Architecture) pattern t
 ### Core Ports (Interfaces)
 
 #### 1. Costs Source Port
-**Purpose**: Abstract interface for fetching invoices from various providers
+**Purpose**: Abstract interface for iterating over invoices from various providers
 ```python
 class CostsSource(ABC):
     @abstractmethod
-    def get_available_invoices(self, since_date: datetime) -> List[InvoiceMetadata]
-    @abstractmethod
-    def download_invoice(self, invoice_metadata: InvoiceMetadata) -> InvoiceFile
+    def __iter__(self) -> Iterator[Invoice]
 ```
 
-**Note**: The `download_invoice` method handles all the complex navigation, authentication, and file retrieval internally. Each adapter implementation manages its own provider-specific download process.
+**Note**: The iterator yields `Invoice` objects in chronological order from newest to oldest. Each adapter implementation handles all the complex navigation, authentication, and file retrieval internally. The business logic can break iteration when it encounters an already-registered invoice, making the process more efficient.
 
 #### 2. Invoice Archive Port
 **Purpose**: Abstract interface for storing invoice files in cloud storage
 ```python
 class InvoiceArchive(ABC):
     @abstractmethod
-    def archive_invoice(self, invoice_file: InvoiceFile, metadata: InvoiceMetadata) -> ArchiveResult
+    def archive_invoice(self, invoice: Invoice) -> ArchiveResult
     @abstractmethod
     def get_invoice_url(self, archive_id: str) -> str
 ```
@@ -39,7 +37,7 @@ class CostsRegistry(ABC):
     @abstractmethod
     def get_registered_invoices(self, since_date: datetime) -> List[RegisteredInvoice]
     @abstractmethod
-    def register_invoice(self, invoice: InvoiceMetadata, archive_results: List[ArchiveResult]) -> bool
+    def register_invoice(self, invoice: Invoice, archive_results: List[ArchiveResult]) -> bool
 ```
 
 ### Adapters (Implementations)
@@ -50,22 +48,22 @@ class CostsRegistry(ABC):
 - **Implementation**: `RepsolCostsSourceAdapter`
 - **Technology**: Selenium WebDriver
 - **Authentication**: Username/password form submission
-- **Invoice Discovery**: Scrapes customer portal bills section
-- **File Download**: Navigates to specific invoice page and downloads PDF (handles all navigation internally)
+- **Invoice Iteration**: Iterates over customer portal bills from newest to oldest
+- **File Download**: Downloads each invoice PDF during iteration (handles all navigation internally)
 
 ##### Digi Costs Source Adapter
 - **Implementation**: `DigiCostsSourceAdapter`
 - **Technology**: Selenium WebDriver
 - **Authentication**: Username/password form submission
-- **Invoice Discovery**: Scrapes customer area invoices section
-- **File Download**: Navigates to specific invoice page and downloads PDF (handles all navigation internally)
+- **Invoice Iteration**: Iterates over customer area invoices from newest to oldest
+- **File Download**: Downloads each invoice PDF during iteration (handles all navigation internally)
 
 ##### Emivasa Costs Source Adapter
 - **Implementation**: `EmivasaCostsSourceAdapter`
 - **Technology**: Selenium WebDriver
 - **Authentication**: Username/password form submission
-- **Invoice Discovery**: Scrapes customer portal bills section
-- **File Download**: Navigates to specific invoice page and downloads PDF (handles all navigation internally)
+- **Invoice Iteration**: Iterates over customer portal bills from newest to oldest
+- **File Download**: Downloads each invoice PDF during iteration (handles all navigation internally)
 
 #### Invoice Archive Adapters
 
@@ -219,10 +217,11 @@ tests/
 
 ### Core Domain Models
 
-#### InvoiceMetadata
+#### Invoice
 ```python
 @dataclass
-class InvoiceMetadata:
+class Invoice:
+    # Metadata fields
     invoice_date: datetime  # Extracted from invoice document
     concept: str  # Provider-specific parameter (e.g., "Electricity", "Internet", "Water")
     type: str  # Provider-specific parameter (e.g., "Monthly Bill", "Quarterly Bill")
@@ -230,14 +229,9 @@ class InvoiceMetadata:
     iva_euros: Decimal  # Extracted from invoice document (VAT amount)
     deductible_percentage: float  # Provider-specific parameter (e.g., 0.0, 0.5, 1.0)
     file_name: str
-```
-
-#### InvoiceFile
-```python
-@dataclass
-class InvoiceFile:
+    
+    # File fields
     content: bytes
-    file_name: str
     content_type: str
     size: int
     hash_md5: str
@@ -307,15 +301,13 @@ These fields are extracted from the actual invoice PDF using OCR or text parsing
 3. For each provider (Repsol, Digi, Emivasa):
    a. Create CostsSource adapter with provider-specific parameters
    b. Authenticate with provider portal
-   c. Get available invoices (since last run)
-   d. For each new invoice:
-      - Check if already registered (CostsRegistry)
-      - If not registered:
-        - Download invoice file (CostsSource)
-        - Extract invoice_date, cost_euros, iva_euros from PDF
-        - Combine with provider parameters (concept, type, deductible_percentage)
-        - Store in both archives (MultiplexerArchiveAdapter)
-        - Register complete invoice metadata (CostsRegistry)
+   c. Iterate over invoices (newest to oldest):
+      - For each Invoice object from CostsSource iterator:
+        - Check if already registered (CostsRegistry)
+        - If already registered: break iteration (stop processing older invoices)
+        - If not registered:
+          - Store in both archives (MultiplexerArchiveAdapter)
+          - Register complete invoice (CostsRegistry)
    ↓
 4. Generate execution report
    ↓
@@ -535,31 +527,28 @@ The Adapters and Ports pattern enables comprehensive testing by allowing complet
 #### Mock Adapters
 ```python
 class MockCostsSource(CostsSource):
-    def get_available_invoices(self, since_date: datetime) -> List[InvoiceMetadata]:
-        # Return predefined test data
-        pass
-    
-    def download_invoice(self, invoice_metadata: InvoiceMetadata) -> InvoiceFile:
-        # Return mock PDF file
-        pass
+    def __iter__(self) -> Iterator[Invoice]:
+        # Yield predefined test Invoice objects from newest to oldest
+        for invoice in self.test_invoices:
+            yield invoice
 
 class MockInvoiceArchive(InvoiceArchive):
-    def archive_invoice(self, invoice_file: InvoiceFile, metadata: InvoiceMetadata) -> ArchiveResult:
+    def archive_invoice(self, invoice: Invoice) -> ArchiveResult:
         # Simulate successful storage
         pass
 ```
 
 #### Test Data Factories
 ```python
-class InvoiceMetadataFactory:
+class InvoiceFactory:
     @staticmethod
-    def create_repsol_invoice() -> InvoiceMetadata:
-        # Create test Repsol invoice metadata
+    def create_repsol_invoice() -> Invoice:
+        # Create test Repsol invoice with metadata and file content
         pass
     
     @staticmethod
-    def create_digi_invoice() -> InvoiceMetadata:
-        # Create test Digi invoice metadata
+    def create_digi_invoice() -> Invoice:
+        # Create test Digi invoice with metadata and file content
         pass
 ```
 

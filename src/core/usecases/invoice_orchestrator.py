@@ -8,8 +8,7 @@ from datetime import datetime, timedelta
 from typing import List, Dict, Any, Optional
 
 from ..domain.archive_result import ArchiveResult
-from ..domain.invoice_file import InvoiceFile
-from ..domain.invoice_metadata import InvoiceMetadata
+from ..domain.invoice import Invoice
 from ..domain.registered_invoice import RegisteredInvoice
 from ..ports.costs_registry import CostsRegistry
 from ..ports.costs_source import CostsSource
@@ -116,112 +115,96 @@ class InvoiceOrchestrator:
         }
         
         try:
-            # Get available invoices from the source
-            available_invoices = costs_source.get_available_invoices(since_date)
-            source_result["invoices_found"] = len(available_invoices)
-            
-            self.logger.info("Found available invoices", 
-                           source=source_name,
-                           count=len(available_invoices))
-            
-            # Filter out already processed invoices
-            new_invoices = self.idempotency_service.filter_new_invoices(available_invoices, since_date)
-            
-            self.logger.info("Filtered new invoices", 
-                           source=source_name,
-                           new_count=len(new_invoices),
-                           skipped_count=len(available_invoices) - len(new_invoices))
-            
-            # Process each new invoice
-            for invoice_metadata in new_invoices:
+            # Iterate over invoices from the source (newest to oldest)
+            for invoice in costs_source:
+                source_result["invoices_found"] += 1
+                
+                # Check if this invoice is already registered
+                if self.idempotency_service.is_invoice_processed(invoice):
+                    source_result["invoices_skipped"] += 1
+                    self.logger.debug("Invoice already processed, skipping",
+                                    source=source_name,
+                                    file_name=invoice.file_name,
+                                    invoice_date=invoice.invoice_date.isoformat())
+                    continue  # Skip to next invoice
+                
+                # Process the new invoice
                 try:
-                    success = self._process_single_invoice(costs_source, invoice_metadata)
+                    success = self._process_single_invoice(invoice)
                     if success:
                         source_result["invoices_processed"] += 1
                     else:
                         source_result["invoices_failed"] += 1
                         
                 except Exception as e:
-                    error_msg = f"Failed to process invoice {invoice_metadata.file_name}: {str(e)}"
+                    error_msg = f"Failed to process invoice {invoice.file_name}: {str(e)}"
                     self.logger.error("Invoice processing failed",
                                     source=source_name,
-                                    file_name=invoice_metadata.file_name,
+                                    file_name=invoice.file_name,
                                     error=str(e))
                     source_result["errors"].append(error_msg)
                     source_result["invoices_failed"] += 1
             
-            source_result["invoices_skipped"] = len(available_invoices) - len(new_invoices)
-            
         except Exception as e:
-            error_msg = f"Failed to get available invoices from {source_name}: {str(e)}"
-            self.logger.error("Source invoice retrieval failed",
+            error_msg = f"Failed to iterate invoices from {source_name}: {str(e)}"
+            self.logger.error("Source invoice iteration failed",
                             source=source_name,
                             error=str(e))
             source_result["errors"].append(error_msg)
         
         self.logger.info("Source processing completed",
                         source=source_name,
+                        found=source_result["invoices_found"],
                         processed=source_result["invoices_processed"],
                         failed=source_result["invoices_failed"],
                         skipped=source_result["invoices_skipped"])
         
         return source_result
     
-    def _process_single_invoice(self, costs_source: CostsSource, invoice_metadata: InvoiceMetadata) -> bool:
+    def _process_single_invoice(self, invoice: Invoice) -> bool:
         """Process a single invoice through the complete workflow."""
         try:
-            # Download the invoice file
-            self.logger.debug("Downloading invoice file",
-                            file_name=invoice_metadata.file_name)
-            
-            invoice_file = costs_source.download_invoice(invoice_metadata)
-            
             # Validate the PDF file
-            if not self.file_processing_service.validate_pdf_file(invoice_file):
+            if not self.file_processing_service.validate_pdf_file(invoice):
                 self.logger.error("Invalid PDF file",
-                                file_name=invoice_metadata.file_name)
+                                file_name=invoice.file_name)
                 return False
             
             # Extract metadata from the PDF (this will override the metadata from the source)
-            extracted_metadata = self.file_processing_service.extract_metadata_from_pdf(
-                invoice_file, 
-                invoice_metadata.concept,
-                invoice_metadata.type,
-                invoice_metadata.deductible_percentage
-            )
+            extracted_metadata = self.file_processing_service.extract_metadata_from_pdf(invoice)
             
             # Archive the invoice file
             self.logger.debug("Archiving invoice file",
-                            file_name=invoice_metadata.file_name)
+                            file_name=invoice.file_name)
             
-            archive_result = self.invoice_archive.archive_invoice(invoice_file, extracted_metadata)
+            archive_result = self.invoice_archive.archive_invoice(invoice)
             
             if not archive_result.success:
                 self.logger.error("Failed to archive invoice",
-                                file_name=invoice_metadata.file_name,
+                                file_name=invoice.file_name,
                                 error=archive_result.error_message)
                 return False
             
             # Register the invoice
             self.logger.debug("Registering invoice",
-                            file_name=invoice_metadata.file_name)
+                            file_name=invoice.file_name)
             
-            success = self.costs_registry.register_invoice(extracted_metadata, [archive_result])
+            success = self.costs_registry.register_invoice(invoice, [archive_result])
             
             if success:
                 self.logger.info("Successfully processed invoice",
-                               file_name=invoice_metadata.file_name,
-                               invoice_date=extracted_metadata.invoice_date.isoformat(),
-                               cost_euros=float(extracted_metadata.cost_euros))
+                               file_name=invoice.file_name,
+                               invoice_date=invoice.invoice_date.isoformat(),
+                               cost_euros=float(invoice.cost_euros))
             else:
                 self.logger.error("Failed to register invoice",
-                                file_name=invoice_metadata.file_name)
+                                file_name=invoice.file_name)
             
             return success
             
         except Exception as e:
             self.logger.error("Invoice processing failed",
-                            file_name=invoice_metadata.file_name,
+                            file_name=invoice.file_name,
                             error=str(e))
             return False
     

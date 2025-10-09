@@ -39,12 +39,6 @@ pytest tests/integration/
 pytest tests/integration/adapters/costs_sources/test_repsol_explore.py
 ```
 
-### Repsol Exploration Test
-```bash
-cd tests
-python run_repsol_exploration.py
-```
-
 ## Test Artifacts
 
 Test artifacts (screenshots, HTML files, downloaded PDFs) are stored in `tests/artifacts/` and are automatically ignored by git.

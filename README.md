@@ -54,14 +54,21 @@ This system follows the **Adapters and Ports** (Hexagonal Architecture) pattern 
 
 1. Clone the repository:
 ```bash
-git clone <repository-url>
+git clone https://github.com/esdandreu/automono.git
 cd automono
 ```
 
 2. Create a virtual environment:
+Unix:
 ```bash
 python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
+source venv/bin/activate 
+```
+
+Windows:
+```powershell
+python -m venv venv
+venv\Scripts\activate
 ```
 
 3. Install dependencies:

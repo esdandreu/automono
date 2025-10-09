@@ -7,7 +7,7 @@ Ensures no duplicate processing and provides idempotent operations.
 from datetime import datetime, timedelta
 from typing import List, Optional, Dict, Any, Final
 
-from ..domain.invoice_metadata import InvoiceMetadata
+from ..domain.invoice import Invoice
 from ..domain.registered_invoice import RegisteredInvoice
 from ..ports.costs_registry import CostsRegistry
 from ...infrastructure.logging.logger import get_logger
@@ -23,53 +23,7 @@ class IdempotencyService:
         self.costs_registry = costs_registry
         self.logger = logger
     
-    def filter_new_invoices(self, invoices: List[InvoiceMetadata], since_date: Optional[datetime] = None) -> List[InvoiceMetadata]:
-        """
-        Filter out invoices that have already been processed.
-        
-        Args:
-            invoices: List of invoices to check
-            since_date: Only check invoices from this date onwards
-            
-        Returns:
-            List of invoices that haven't been processed yet
-        """
-        if not invoices:
-            return []
-        
-        # Get registered invoices from the registry
-        lookback_date = since_date or (datetime.now() - timedelta(days=90))
-        registered_invoices = self.costs_registry.get_registered_invoices(lookback_date)
-        
-        # Create a set of registered invoice keys for fast lookup
-        registered_keys = {
-            self._create_invoice_key(reg_invoice) 
-            for reg_invoice in registered_invoices
-        }
-        
-        # Filter out already processed invoices
-        new_invoices = []
-        for invoice in invoices:
-            invoice_key = self._create_invoice_key_from_metadata(invoice)
-            
-            if invoice_key not in registered_keys:
-                new_invoices.append(invoice)
-                self.logger.debug("Invoice is new", 
-                                invoice_key=invoice_key,
-                                invoice_date=invoice.invoice_date.isoformat())
-            else:
-                self.logger.debug("Invoice already processed, skipping",
-                                invoice_key=invoice_key,
-                                invoice_date=invoice.invoice_date.isoformat())
-        
-        self.logger.info("Filtered invoices for processing",
-                        total_invoices=len(invoices),
-                        new_invoices=len(new_invoices),
-                        already_processed=len(invoices) - len(new_invoices))
-        
-        return new_invoices
-    
-    def is_invoice_processed(self, invoice: InvoiceMetadata) -> bool:
+    def is_invoice_processed(self, invoice: Invoice) -> bool:
         """
         Check if a specific invoice has already been processed.
         
@@ -82,7 +36,7 @@ class IdempotencyService:
         lookback_date = datetime.now() - timedelta(days=90)
         registered_invoices = self.costs_registry.get_registered_invoices(lookback_date)
         
-        invoice_key = self._create_invoice_key_from_metadata(invoice)
+        invoice_key = self._create_invoice_key_from_invoice(invoice)
         
         for reg_invoice in registered_invoices:
             if self._create_invoice_key(reg_invoice) == invoice_key:
@@ -90,12 +44,13 @@ class IdempotencyService:
         
         return False
     
+    
     def _create_invoice_key(self, registered_invoice: RegisteredInvoice) -> str:
         """Create a unique key for a registered invoice."""
         return f"{registered_invoice.invoice_date.date()}_{registered_invoice.concept}_{registered_invoice.type}_{registered_invoice.cost_euros}"
     
-    def _create_invoice_key_from_metadata(self, invoice: InvoiceMetadata) -> str:
-        """Create a unique key for an invoice metadata."""
+    def _create_invoice_key_from_invoice(self, invoice: Invoice) -> str:
+        """Create a unique key for an invoice."""
         return f"{invoice.invoice_date.date()}_{invoice.concept}_{invoice.type}_{invoice.cost_euros}"
     
     def get_processing_statistics(self, since_date: Optional[datetime] = None) -> Dict[str, Any]:
