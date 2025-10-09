@@ -6,6 +6,7 @@ Fetches electricity invoices from Repsol customer portal.
 
 from abc import abstractmethod
 import re
+import time
 from datetime import datetime
 from decimal import Decimal
 from typing import Iterator, List, Optional, Dict, Any, Final, Protocol
@@ -38,7 +39,6 @@ class RepsolCostsSource(CostsSource):
     DEDUCTIBLE_PERCENTAGE: Final[float] = 1.0  # 100% deductible for business
     
     # URLs
-    LOGIN_URL: Final[str] = "https://areacliente.repsol.es/login"
     INVOICES_URL: Final[str] = "https://areacliente.repsol.es/mis-facturas"
     
     def __init__(self, config: RepsolConfig, browser: Browser, logger: Logger):
@@ -47,7 +47,6 @@ class RepsolCostsSource(CostsSource):
         self.password = config.repsol_password
         self.browser = browser
         self.logger = logger
-        self.driver = None
     
     def __iter__(self) -> Iterator[Invoice]:
         """
@@ -56,21 +55,20 @@ class RepsolCostsSource(CostsSource):
         Yields:
             Invoice objects with complete metadata and file content
         """
+        self.browser.start()
         try:
-            self.logger.info("Starting Repsol invoice iteration")
-            
-            # Start browser session
-            self.driver = self.browser.start()
+            self.logger.info("Finding Repsol invoices")
             
             # Login to Repsol
+            self.browser.driver.get(self.INVOICES_URL)
             self._login()
-            
+
             # Navigate to invoices page
-            self.driver.get(self.INVOICES_URL)
-            self.browser.wait_for_element(By.CLASS_NAME, "facturas", timeout=30)
+            self.browser.wait_for_element(By.LINK_TEXT, "Facturas", timeout=30).click()
             
             # Get invoice metadata and download each one
             invoice_metadata_list = self._extract_invoice_metadata()
+            self.logger.info("Found Repsol invoices", count=len(invoice_metadata_list))
             
             for metadata in invoice_metadata_list:
                 try:
@@ -106,14 +104,26 @@ class RepsolCostsSource(CostsSource):
                                     file_name=metadata.get('filename', 'unknown'),
                                     error=str(e))
                     continue
-            
-        except Exception as e:
-            self.logger.error("Failed to iterate Repsol invoices", error=str(e))
-            raise
         finally:
-            if self.driver:
-                self.browser.stop()
-                self.driver = None
+            self.browser.stop()
+     
+    def _login(self) -> None:
+        """Login to Repsol customer portal."""
+        self.logger.info("Logging into Repsol customer portal")
+        # Handle cookie policy if present
+        self._accept_cookie_policy(timeout=10)
+        # Fill username
+        username_field = self.browser.wait_for_element(By.ID, "mail", timeout=30)
+        username_field.clear()
+        username_field.send_keys(self.username)
+        # Fill password
+        password_field = self.browser.wait_for_element(By.ID, "pass", timeout=30)
+        password_field.clear()
+        password_field.send_keys(self.password)
+        # Submit login form
+        login_button = self.browser.wait_for_clickable(By.CSS_SELECTOR, "button[type='submit']", timeout=30)
+        login_button.click()
+        self.logger.info("Successfully logged into Repsol customer portal")
     
     def _download_invoice_file(self, metadata: Dict[str, Any]) -> Dict[str, Any]:
         """Download a specific invoice file and return file data."""
@@ -130,7 +140,7 @@ class RepsolCostsSource(CostsSource):
             download_link.click()
             
             # Wait for download to complete
-            downloaded_file = self.browser.wait_for_download(metadata['filename'])
+            downloaded_file = self._wait_for_download(metadata['filename'])
             
             # Read the downloaded file
             with open(downloaded_file, 'rb') as f:
@@ -158,39 +168,7 @@ class RepsolCostsSource(CostsSource):
                             file_name=metadata.get('filename', 'unknown'),
                             error=str(e))
             raise
-    
-    def _login(self) -> None:
-        """Login to Repsol customer portal."""
-        try:
-            self.logger.info("Logging into Repsol customer portal")
-            
-            # Navigate to login page
-            self.driver.get(self.LOGIN_URL)
-            
-            # Wait for login form
-            self.browser.wait_for_element(By.ID, "username", timeout=30)
-            
-            # Fill username
-            username_field = self.driver.find_element(By.ID, "username")
-            username_field.clear()
-            username_field.send_keys(self.username)
-            
-            # Fill password
-            password_field = self.driver.find_element(By.ID, "password")
-            password_field.clear()
-            password_field.send_keys(self.password)
-            
-            # Submit login form
-            login_button = self.driver.find_element(By.CSS_SELECTOR, "button[type='submit']")
-            login_button.click()
-            
-            # Wait for successful login (redirect to dashboard or invoices page)
-            self.browser.wait_for_element(By.CLASS_NAME, "dashboard", timeout=30)
-            
-            self.logger.info("Successfully logged into Repsol customer portal")
-        except Exception as e:
-            self.logger.error("Login failed", error=str(e))
-            raise
+      
     
     def _extract_invoice_metadata(self) -> List[Dict[str, Any]]:
         """Extract invoice metadata from the invoices page."""
@@ -198,7 +176,7 @@ class RepsolCostsSource(CostsSource):
         
         try:
             # Find all invoice rows (adjust selector based on actual HTML structure)
-            invoice_rows = self.driver.find_elements(By.CSS_SELECTOR, ".factura-row, .invoice-row, tr[data-invoice]")
+            invoice_rows = self.browser.driver.find_elements(By.CSS_SELECTOR, ".factura-row, .invoice-row, tr[data-invoice]")
             
             for row in invoice_rows:
                 try:
@@ -260,7 +238,7 @@ class RepsolCostsSource(CostsSource):
         
         try:
             # Look for any links that might be invoices
-            links = self.driver.find_elements(By.CSS_SELECTOR, "a[href*='factura'], a[href*='invoice'], a[href*='.pdf']")
+            links = self.browser.driver.find_elements(By.CSS_SELECTOR, "a[href*='factura'], a[href*='invoice'], a[href*='.pdf']")
             
             for link in links:
                 try:
@@ -296,7 +274,7 @@ class RepsolCostsSource(CostsSource):
         """Find the download link for a specific invoice."""
         try:
             # Look for download links that match the invoice
-            links = self.driver.find_elements(By.CSS_SELECTOR, "a[href*='download'], a[href*='.pdf'], button[data-download]")
+            links = self.browser.driver.find_elements(By.CSS_SELECTOR, "a[href*='download'], a[href*='.pdf'], button[data-download]")
             
             for link in links:
                 link_text = link.text.strip().lower()
@@ -350,5 +328,78 @@ class RepsolCostsSource(CostsSource):
         
         try:
             return Decimal(cleaned)
-        except:
+        except (ValueError, TypeError):
             return Decimal("0.00")
+    
+    def _accept_cookie_policy(self, timeout: int = 10) -> bool:
+        """Accept cookie policy if present. Returns True if accepted, False if not found."""
+        # Common cookie policy button selectors
+        cookie_selectors = [
+            # Generic cookie accept buttons
+            "button[id*='accept']",
+            "button[class*='accept']",
+            "button[id*='cookie']",
+            "button[class*='cookie']",
+            "button[id*='consent']",
+            "button[class*='consent']",
+            # Common text-based selectors
+            "button:contains('Accept')",
+            "button:contains('Aceptar')",
+            "button:contains('Accept All')",
+            "button:contains('Aceptar todo')",
+            "button:contains('Accept Cookies')",
+            "button:contains('Aceptar cookies')",
+            # Common ID/class patterns
+            "#cookie-accept",
+            "#accept-cookies",
+            "#cookie-consent",
+            ".cookie-accept",
+            ".accept-cookies",
+            ".cookie-consent",
+            ".cookie-banner button",
+            ".consent-banner button",
+            # Repsol-specific selectors (if any)
+            "[data-testid*='cookie']",
+            "[data-testid*='accept']",
+            "[data-testid*='consent']"
+        ]
+        
+        try:
+            # Try to find and click cookie accept button
+            for selector in cookie_selectors:
+                try:
+                    element = self.browser.wait_for_element(By.CSS_SELECTOR, selector)
+                    self.logger.debug("Accepted cookie policy banner")
+                    element.click()
+                    time.sleep(0.1)
+                    return True
+                except Exception:
+                    # Continue to next selector if this one doesn't work
+                    continue
+            else:
+                self.logger.debug("No cookie policy banner found")
+                return False
+        except Exception as e:
+            self.logger.warning("Error handling cookie policy", error=str(e))
+            return False
+    
+    def _wait_for_download(self, filename: str, timeout: int = 30):
+        """Wait for a file to be downloaded and return its path."""
+        download_dir = self.browser.get_download_dir()
+        self.logger.debug("Waiting for download", filename=filename, timeout=timeout)
+        
+        start_time = time.time()
+        while time.time() - start_time < timeout:
+            # Check for the file in the download directory
+            file_path = download_dir / filename
+            
+            # Also check for .crdownload files (Chrome download in progress)
+            crdownload_path = download_dir / f"{filename}.crdownload"
+            
+            if file_path.exists() and not crdownload_path.exists():
+                self.logger.debug("Download completed", file_path=str(file_path))
+                return file_path
+            
+            time.sleep(0.5)
+        
+        raise TimeoutError(f"Download timeout: {filename} not found after {timeout} seconds")

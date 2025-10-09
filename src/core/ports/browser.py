@@ -21,8 +21,14 @@ class Browser(Protocol):
     """Browser interface for dependency injection."""
     
     @abstractmethod
-    def start(self) -> webdriver.Chrome:
+    def start(self) -> None:
         """Start the browser."""
+        pass
+
+    @property
+    @abstractmethod
+    def driver(self) -> webdriver.Chrome:
+        """Get the browser driver."""
         pass
     
     @abstractmethod
@@ -31,12 +37,12 @@ class Browser(Protocol):
         pass
     
     @abstractmethod
-    def wait_for_element(self, by: By, value: str, timeout: int = 10) -> None:
+    def wait_for_element(self, by: By, value: str, timeout: int = 10) -> WebElement:
         """Wait for an element to be present and visible."""
         pass
     
     @abstractmethod
-    def wait_for_clickable(self, by: By, value: str, timeout: int = 10) -> None:
+    def wait_for_clickable(self, by: By, value: str, timeout: int = 10) -> WebElement:
         """Wait for an element to be clickable."""
         pass
     
