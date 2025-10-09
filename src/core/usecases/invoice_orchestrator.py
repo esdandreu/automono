@@ -7,17 +7,15 @@ Main business logic that coordinates the invoice processing workflow.
 from datetime import datetime, timedelta
 from typing import List, Dict, Any, Optional
 
-from ..domain.archive_result import ArchiveResult
-from ..domain.invoice import Invoice
-from ..domain.registered_invoice import RegisteredInvoice
-from ..ports.costs_registry import CostsRegistry
-from ..ports.costs_source import CostsSource
-from ..ports.invoice_archive import InvoiceArchive
-from .file_processing_service import FileProcessingService
-from .idempotency_service import IdempotencyService
-from ...infrastructure.logging.logger import get_logger
-
-logger = get_logger(__name__)
+from src.core.domain.archive_result import ArchiveResult
+from src.core.domain.invoice import Invoice
+from src.core.domain.registered_invoice import RegisteredInvoice
+from src.core.ports.costs_registry import CostsRegistry
+from src.core.ports.costs_source import CostsSource
+from src.core.ports.invoice_archive import InvoiceArchive
+from src.core.ports.logger import Logger
+from src.core.usecases.file_processing_service import FileProcessingService
+from src.core.usecases.idempotency_service import IdempotencyService
 
 
 class InvoiceOrchestrator:
@@ -29,7 +27,8 @@ class InvoiceOrchestrator:
         invoice_archive: InvoiceArchive,
         costs_registry: CostsRegistry,
         file_processing_service: FileProcessingService,
-        idempotency_service: IdempotencyService
+        idempotency_service: IdempotencyService,
+        logger: Logger
     ):
         """Initialize the invoice orchestrator."""
         self.costs_sources = costs_sources

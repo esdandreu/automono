@@ -26,8 +26,6 @@ httpx==0.25.2
 
 # Configuration and environment
 python-dotenv==1.0.0
-pydantic==2.5.0
-pydantic-settings==2.1.0
 
 # Logging and monitoring
 structlog==23.2.0
@@ -48,4 +46,3 @@ mypy==1.7.1
 
 # Type hints
 types-requests==2.31.0.10
-types-PyPDF2==3.0.0.20231117

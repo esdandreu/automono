@@ -13,16 +13,14 @@ from typing import Optional, Tuple, Final
 import PyPDF2
 import pdfplumber
 
-from ..domain.invoice import Invoice
-from ...infrastructure.logging.logger import get_logger
-
-logger = get_logger(__name__)
+from src.core.domain.invoice import Invoice
+from src.core.ports.logger import Logger
 
 
 class FileProcessingService:
     """Service for processing invoice files and extracting metadata."""
     
-    def __init__(self):
+    def __init__(self, logger: Logger):
         """Initialize the file processing service."""
         self.logger = logger
     

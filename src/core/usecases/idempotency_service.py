@@ -7,18 +7,16 @@ Ensures no duplicate processing and provides idempotent operations.
 from datetime import datetime, timedelta
 from typing import List, Optional, Dict, Any, Final
 
-from ..domain.invoice import Invoice
-from ..domain.registered_invoice import RegisteredInvoice
-from ..ports.costs_registry import CostsRegistry
-from ...infrastructure.logging.logger import get_logger
-
-logger = get_logger(__name__)
+from src.core.domain.invoice import Invoice
+from src.core.domain.registered_invoice import RegisteredInvoice
+from src.core.ports.costs_registry import CostsRegistry
+from src.core.ports.logger import Logger
 
 
 class IdempotencyService:
     """Service for ensuring idempotent invoice processing."""
     
-    def __init__(self, costs_registry: CostsRegistry):
+    def __init__(self, costs_registry: CostsRegistry, logger: Logger):
         """Initialize the idempotency service."""
         self.costs_registry = costs_registry
         self.logger = logger

@@ -8,7 +8,7 @@ This system follows the **Adapters and Ports** (Hexagonal Architecture) pattern 
 
 ### Core Components
 
-- **Domain Models**: Core business entities (`InvoiceMetadata`, `InvoiceFile`, `ArchiveResult`, `RegisteredInvoice`)
+- **Domain Models**: Core business entities (`Invoice`, `ArchiveResult`, `RegisteredInvoice`)
 - **Ports**: Abstract interfaces defining contracts (`CostsSource`, `InvoiceArchive`, `CostsRegistry`)
 - **Use Cases**: Business logic services (`InvoiceOrchestrator`, `IdempotencyService`, `FileProcessingService`)
 - **Adapters**: External integrations (to be implemented)
