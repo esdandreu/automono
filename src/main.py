@@ -6,7 +6,6 @@ This is the main entry point that orchestrates the entire invoice processing wor
 
 import sys
 from datetime import datetime, timedelta
-from typing import List
 
 from core.usecases.file_processing_service import FileProcessingService
 from core.usecases.idempotency_service import IdempotencyService
@@ -14,10 +13,10 @@ from core.usecases.invoice_orchestrator import InvoiceOrchestrator
 from infrastructure.config.settings import get_settings
 from infrastructure.logging.logger import configure_logging, get_logger
 
-# Import adapters (these will be implemented next)
-# from adapters.costs_sources.repsol.repsol_costs_source_adapter import RepsolCostsSourceAdapter
-# from adapters.costs_sources.digi.digi_costs_source_adapter import DigiCostsSourceAdapter
-# from adapters.costs_sources.emivasa.emivasa_costs_source_adapter import EmivasaCostsSourceAdapter
+# Import adapters
+from adapters.costs_sources.repsol.repsol_costs_source_adapter import RepsolCostsSourceAdapter
+from adapters.costs_sources.digi.digi_costs_source_adapter import DigiCostsSourceAdapter
+from adapters.costs_sources.emivasa.emivasa_costs_source_adapter import EmivasaCostsSourceAdapter
 # from adapters.archives.multiplexer.multiplexer_adapter import MultiplexerArchiveAdapter
 # from adapters.registry.google_sheets.google_sheets_costs_registry_adapter import GoogleSheetsCostsRegistryAdapter
 
@@ -39,13 +38,18 @@ def main():
         file_processing_service = FileProcessingService()
         logger.info("File processing service initialized")
         
-        # TODO: Initialize adapters when they are implemented
-        # costs_sources = [
-        #     RepsolCostsSourceAdapter(settings.repsol_username, settings.repsol_password),
-        #     DigiCostsSourceAdapter(settings.digi_username, settings.digi_password),
-        #     EmivasaCostsSourceAdapter(settings.emivasa_username, settings.emivasa_password),
-        # ]
-        # 
+        # Initialize browser service
+        from infrastructure.browser.selenium_service import SeleniumService
+        selenium_service = SeleniumService()
+        
+        # Initialize costs source adapters
+        costs_sources = [
+            RepsolCostsSourceAdapter(settings.repsol_username, settings.repsol_password, selenium_service),
+            DigiCostsSourceAdapter(settings.digi_username, settings.digi_password, selenium_service),
+            EmivasaCostsSourceAdapter(settings.emivasa_username, settings.emivasa_password, selenium_service),
+        ]
+        
+        # TODO: Initialize archive and registry adapters when they are implemented
         # invoice_archive = MultiplexerArchiveAdapter(
         #     google_drive_adapter=GoogleDriveArchiveAdapter(settings.google_credentials_json, settings.google_drive_folder_id),
         #     onedrive_adapter=OneDriveArchiveAdapter(settings.microsoft_client_id, settings.microsoft_client_secret, settings.microsoft_tenant_id, settings.onedrive_folder_id)
@@ -53,8 +57,7 @@ def main():
         # 
         # costs_registry = GoogleSheetsCostsRegistryAdapter(settings.google_credentials_json, settings.google_sheets_id)
         
-        # For now, create empty lists/None to allow the system to start
-        costs_sources: List = []
+        # For now, create None for archive and registry to allow the system to start
         invoice_archive = None
         costs_registry = None
         
@@ -111,14 +114,20 @@ def main():
             print("="*50)
             
         else:
-            logger.warning("Not all required services are available. Adapters need to be implemented.")
+            logger.warning("Not all required services are available. Archive and registry adapters need to be implemented.")
             print("\n" + "="*50)
-            print("SYSTEM NOT FULLY CONFIGURED")
+            print("SYSTEM PARTIALLY CONFIGURED")
             print("="*50)
-            print("The core system is ready, but adapters need to be implemented:")
-            print("- Costs source adapters (Repsol, Digi, Emivasa)")
-            print("- Archive adapters (Google Drive, OneDrive)")
-            print("- Registry adapter (Google Sheets)")
+            print("✅ Costs source adapters implemented:")
+            print("  - Repsol (Electricity)")
+            print("  - Digi (Internet)")
+            print("  - Emivasa (Water)")
+            print("")
+            print("🚧 Still need to implement:")
+            print("  - Archive adapters (Google Drive, OneDrive)")
+            print("  - Registry adapter (Google Sheets)")
+            print("")
+            print("The system can fetch invoices but cannot store or track them yet.")
             print("="*50)
         
         logger.info("Invoice automation system completed successfully")

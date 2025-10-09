@@ -6,12 +6,12 @@ Provides consistent logging across the application with structured output.
 
 import logging
 import sys
-from typing import Any, Dict
+from typing import Any, Dict, Final
 
 import structlog
 from colorama import Fore, Style, init
 
-from ..config.settings import get_settings
+from src.infrastructure.config.settings import get_settings
 
 # Initialize colorama for colored output
 init(autoreset=True)

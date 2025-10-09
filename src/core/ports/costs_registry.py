@@ -4,19 +4,18 @@ Costs registry port interface.
 Defines the contract for managing invoice records and tracking.
 """
 
-from abc import ABC, abstractmethod
 from datetime import datetime
-from typing import List
+from typing import List, Protocol, runtime_checkable
 
 from ..domain.archive_result import ArchiveResult
 from ..domain.invoice_metadata import InvoiceMetadata
 from ..domain.registered_invoice import RegisteredInvoice
 
 
-class CostsRegistry(ABC):
-    """Abstract interface for managing invoice records and tracking."""
+@runtime_checkable
+class CostsRegistry(Protocol):
+    """Protocol interface for managing invoice records and tracking."""
     
-    @abstractmethod
     def get_registered_invoices(self, since_date: datetime) -> List[RegisteredInvoice]:
         """
         Get a list of registered invoices since the specified date.
@@ -32,9 +31,8 @@ class CostsRegistry(ABC):
             NetworkError: If there are network connectivity issues
             RegistryError: If the registry service is unavailable
         """
-        pass
+        ...
     
-    @abstractmethod
     def register_invoice(self, invoice: InvoiceMetadata, archive_results: List[ArchiveResult]) -> bool:
         """
         Register a new invoice with its archive results.
@@ -52,4 +50,4 @@ class CostsRegistry(ABC):
             RegistryError: If the registry service is unavailable
             DuplicateError: If the invoice is already registered
         """
-        pass
+        ...

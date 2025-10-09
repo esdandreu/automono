@@ -24,14 +24,14 @@ This system follows the **Adapters and Ports** (Hexagonal Architecture) pattern 
 - **Core Use Cases**: Main business logic services
 - **Infrastructure**: Configuration, logging, and browser automation services
 - **Main Entry Point**: Application orchestrator
-- **Testing**: Unit tests for domain models
+- **Costs Source Adapters**: 
+  - ✅ Repsol costs source adapter (Electricity)
+  - ✅ Digi costs source adapter (Internet)
+  - ✅ Emivasa costs source adapter (Water)
+- **Testing**: Unit tests for domain models and adapters
 
 ### 🚧 To Be Implemented
 
-- **Costs Source Adapters**: 
-  - Repsol costs source adapter
-  - Digi costs source adapter  
-  - Emivasa costs source adapter
 - **Archive Adapters**:
   - Google Drive archive adapter
   - OneDrive archive adapter
@@ -99,16 +99,53 @@ LOG_LEVEL=INFO
 
 ### Running the System
 
-Currently, the system can be started but will show a warning that adapters need to be implemented:
+The system can now fetch invoices from all three providers but will show a warning that archive and registry adapters need to be implemented:
 
 ```bash
 python src/main.py
 ```
 
+**Current Capabilities:**
+- ✅ Can authenticate with Repsol, Digi, and Emivasa portals
+- ✅ Can extract invoice metadata from provider websites
+- ✅ Can download invoice PDF files
+- ✅ Can process and validate PDF files
+- 🚧 Cannot store files in cloud storage yet
+- 🚧 Cannot track processed invoices yet
+
 ### Running Tests
 
 ```bash
 pytest tests/ -v
+```
+
+### Type Checking
+
+The codebase uses comprehensive type annotations for better IDE support and static analysis:
+
+```bash
+# Run type checking with mypy
+python type_check.py
+
+# Or directly with mypy
+mypy --strict src/
+```
+
+### Type Safety Features
+
+- **Protocol-based interfaces**: Using `typing.Protocol` for better duck typing
+- **Literal types**: For status values and other constrained types
+- **Final annotations**: For constants and immutable values
+- **Comprehensive type hints**: All functions and methods are fully typed
+- **Runtime type validation**: Domain models validate types at runtime
+
+Example:
+```python
+from src.core.domain.registered_invoice import InvoiceStatus
+
+# Type-safe status assignment
+status: InvoiceStatus = "success"  # ✅ Valid
+status = "invalid"  # ❌ Type error
 ```
 
 ## Invoice Data Model

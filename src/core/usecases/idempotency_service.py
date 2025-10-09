@@ -5,7 +5,7 @@ Ensures no duplicate processing and provides idempotent operations.
 """
 
 from datetime import datetime, timedelta
-from typing import List, Optional
+from typing import List, Optional, Dict, Any, Final
 
 from ..domain.invoice_metadata import InvoiceMetadata
 from ..domain.registered_invoice import RegisteredInvoice
@@ -98,7 +98,7 @@ class IdempotencyService:
         """Create a unique key for an invoice metadata."""
         return f"{invoice.invoice_date.date()}_{invoice.concept}_{invoice.type}_{invoice.cost_euros}"
     
-    def get_processing_statistics(self, since_date: Optional[datetime] = None) -> dict:
+    def get_processing_statistics(self, since_date: Optional[datetime] = None) -> Dict[str, Any]:
         """
         Get statistics about invoice processing.
         

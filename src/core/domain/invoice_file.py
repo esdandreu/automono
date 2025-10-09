@@ -6,7 +6,7 @@ Represents a downloaded invoice file with its content and metadata.
 
 import hashlib
 from dataclasses import dataclass
-from typing import Optional
+from typing import Optional, ClassVar
 
 
 @dataclass

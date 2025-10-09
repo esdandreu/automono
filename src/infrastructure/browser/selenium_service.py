@@ -7,7 +7,7 @@ Provides a shared Selenium WebDriver service for web scraping operations.
 import os
 import tempfile
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Final
 
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options as ChromeOptions
@@ -17,8 +17,8 @@ from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.support.ui import WebDriverWait
 from webdriver_manager.chrome import ChromeDriverManager
 
-from ..config.settings import get_settings
-from ..logging.logger import get_logger
+from src.infrastructure.config.settings import get_settings
+from src.infrastructure.logging.logger import get_logger
 
 logger = get_logger(__name__)
 

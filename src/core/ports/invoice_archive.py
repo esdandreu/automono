@@ -4,17 +4,17 @@ Invoice archive port interface.
 Defines the contract for storing invoice files in cloud storage.
 """
 
-from abc import ABC, abstractmethod
+from typing import Protocol, runtime_checkable
 
 from ..domain.archive_result import ArchiveResult
 from ..domain.invoice_file import InvoiceFile
 from ..domain.invoice_metadata import InvoiceMetadata
 
 
-class InvoiceArchive(ABC):
-    """Abstract interface for storing invoice files in cloud storage."""
+@runtime_checkable
+class InvoiceArchive(Protocol):
+    """Protocol interface for storing invoice files in cloud storage."""
     
-    @abstractmethod
     def archive_invoice(self, invoice_file: InvoiceFile, metadata: InvoiceMetadata) -> ArchiveResult:
         """
         Store an invoice file in the cloud storage.
@@ -32,9 +32,8 @@ class InvoiceArchive(ABC):
             StorageError: If the storage service is unavailable
             QuotaExceededError: If storage quota is exceeded
         """
-        pass
+        ...
     
-    @abstractmethod
     def get_invoice_url(self, archive_id: str) -> str:
         """
         Get the URL for an archived invoice.
@@ -50,4 +49,4 @@ class InvoiceArchive(ABC):
             NotFoundError: If the archive ID is not found
             NetworkError: If there are network connectivity issues
         """
-        pass
+        ...

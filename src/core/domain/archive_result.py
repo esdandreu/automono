@@ -5,7 +5,7 @@ Represents the result of archiving an invoice file to cloud storage.
 """
 
 from dataclasses import dataclass
-from typing import Optional
+from typing import Optional, Final
 
 
 @dataclass

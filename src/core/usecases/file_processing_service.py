@@ -4,11 +4,11 @@ File processing service use case.
 Handles PDF validation and metadata extraction from invoice files.
 """
 
+import io
 import re
 from datetime import datetime
 from decimal import Decimal, InvalidOperation
-from pathlib import Path
-from typing import Optional
+from typing import Optional, Tuple, Final
 
 import PyPDF2
 import pdfplumber
@@ -130,7 +130,7 @@ class FileProcessingService:
         
         raise ValueError("Could not extract invoice date from PDF text")
     
-    def _extract_amounts(self, text: str) -> tuple[Decimal, Decimal]:
+    def _extract_amounts(self, text: str) -> Tuple[Decimal, Decimal]:
         """Extract cost and IVA amounts from text."""
         # Look for amounts with euro symbols or "EUR"
         amount_patterns = [
@@ -199,7 +199,3 @@ class FileProcessingService:
         except Exception as e:
             self.logger.error("PDF validation failed", error=str(e))
             return False
-
-
-# Import io at the top level
-import io

@@ -6,16 +6,16 @@ Defines the contract for fetching invoices from various providers.
 
 from abc import ABC, abstractmethod
 from datetime import datetime
-from typing import List
+from typing import List, Protocol, runtime_checkable
 
 from ..domain.invoice_file import InvoiceFile
 from ..domain.invoice_metadata import InvoiceMetadata
 
 
-class CostsSource(ABC):
-    """Abstract interface for fetching invoices from various providers."""
+@runtime_checkable
+class CostsSource(Protocol):
+    """Protocol interface for fetching invoices from various providers."""
     
-    @abstractmethod
     def get_available_invoices(self, since_date: datetime) -> List[InvoiceMetadata]:
         """
         Get a list of available invoices since the specified date.
@@ -31,9 +31,8 @@ class CostsSource(ABC):
             NetworkError: If there are network connectivity issues
             ProviderError: If the provider's system is unavailable
         """
-        pass
+        ...
     
-    @abstractmethod
     def download_invoice(self, invoice_metadata: InvoiceMetadata) -> InvoiceFile:
         """
         Download the actual invoice file for the given metadata.
@@ -54,4 +53,4 @@ class CostsSource(ABC):
             ProviderError: If the provider's system is unavailable
             FileNotFoundError: If the invoice file cannot be found
         """
-        pass
+        ...

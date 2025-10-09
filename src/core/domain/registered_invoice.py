@@ -7,7 +7,11 @@ Represents an invoice that has been processed and registered in the system.
 from dataclasses import dataclass
 from datetime import datetime
 from decimal import Decimal
-from typing import Optional
+from typing import Optional, Final, Literal
+
+
+# Type aliases for better readability
+InvoiceStatus = Literal["success", "failed", "skipped"]
 
 
 @dataclass
@@ -24,7 +28,7 @@ class RegisteredInvoice:
     google_drive_id: Optional[str]
     onedrive_id: Optional[str]
     processed_date: datetime
-    status: str  # "success", "failed", "skipped"
+    status: InvoiceStatus
     
     def __post_init__(self):
         """Validate the registered invoice after initialization."""
@@ -46,8 +50,10 @@ class RegisteredInvoice:
         if not self.file_hash.strip():
             raise ValueError("File hash cannot be empty")
         
-        if self.status not in ["success", "failed", "skipped"]:
-            raise ValueError("Status must be 'success', 'failed', or 'skipped'")
+        # Status validation is handled by the Literal type, but we can add runtime validation
+        valid_statuses: Final[tuple[InvoiceStatus, ...]] = ("success", "failed", "skipped")
+        if self.status not in valid_statuses:
+            raise ValueError(f"Status must be one of {valid_statuses}")
     
     @property
     def total_euros(self) -> Decimal:

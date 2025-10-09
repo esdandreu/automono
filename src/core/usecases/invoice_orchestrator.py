@@ -5,7 +5,7 @@ Main business logic that coordinates the invoice processing workflow.
 """
 
 from datetime import datetime, timedelta
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 
 from ..domain.archive_result import ArchiveResult
 from ..domain.invoice_file import InvoiceFile
@@ -232,7 +232,3 @@ class InvoiceOrchestrator:
             return 0.0
         
         return (results["total_invoices_processed"] / total_attempted) * 100
-
-
-# Import Optional for type hints
-from typing import Optional

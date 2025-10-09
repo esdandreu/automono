@@ -4,10 +4,10 @@ Application configuration settings.
 Manages all configuration through environment variables with validation.
 """
 
-import os
-from typing import Optional
+from typing import Optional, Final
 
-from pydantic import BaseSettings, Field
+from pydantic import Field
+from pydantic_settings import BaseSettings
 
 
 class Settings(BaseSettings):
