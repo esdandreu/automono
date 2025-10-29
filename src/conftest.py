@@ -82,7 +82,7 @@ def pytest_addoption(parser):
 def pytest_configure(config):
     """Configure pytest based on command line arguments."""
     # Check if integration tests should be included
-    include_integration = config.getoption("integration", default=False)
+    include_integration = config.getoption("--integration", default=False)
     
     if not include_integration:
         # Exclude integration tests by default

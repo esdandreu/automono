@@ -7,15 +7,59 @@ name = "automono"
 version = "0.1.0"
 description = "Invoice automation system"
 authors = [
-    {name = "Your Name", email = "your.email@example.com"},
+    {name = "Andreu Gimenez", email = "esdandreu@gmail.com"},
 ]
 dependencies = [
-    "selenium",
-    "structlog",
-    "pytest",
-    "pytest-asyncio",
-    "pytest-mock",
-    "pytest-cov",
+    # Core dependencies
+    "selenium>=4.28.0",
+    "webdriver-manager>=4.0.2",
+    
+    # Google APIs
+    "google-api-python-client>=2.150.0",
+    "google-auth>=2.35.0",
+    "google-auth-oauthlib>=1.2.0",
+    "google-auth-httplib2>=0.2.0",
+    
+    # Microsoft Graph API
+    "msgraph-core>=0.2.2",
+    "requests-oauthlib>=1.3.1",
+    
+    # PDF processing
+    "PyPDF2>=3.0.1",
+    "pdfplumber>=0.11.0",
+    
+    # Data processing
+    "pandas>=2.2.0",
+    "openpyxl>=3.1.5",
+    
+    # HTTP requests
+    "requests>=2.32.0",
+    "httpx>=0.27.0",
+    
+    # Configuration and environment
+    "python-dotenv>=1.0.1",
+    
+    # Logging and monitoring
+    "structlog>=24.1.0",
+    "colorama>=0.4.6",
+    
+    # Testing
+    "pytest>=8.3.0",
+    "pytest-asyncio>=0.24.0",
+    "pytest-mock>=3.14.0",
+    "pytest-cov>=6.0.0",
+    
+    # Type hints
+    "types-requests>=2.32.0.10",
+]
+
+[project.optional-dependencies]
+dev = [
+    # Development tools
+    "black>=24.10.0",
+    "isort>=5.13.0",
+    "flake8>=7.1.0",
+    "mypy>=1.13.0",
 ]
 
 [tool.pytest.ini_options]

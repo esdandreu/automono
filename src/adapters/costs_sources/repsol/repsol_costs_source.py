@@ -105,7 +105,7 @@ class RepsolCostsSource(CostsSource):
                             if invoice.invoice_date
                             else "unknown"
                         ),
-                        cost_euros=(float(invoice.cost_euros),),
+                        cost_euros=float(invoice.cost_euros),
                         iva_euros=float(invoice.iva_euros),
                     )
 
@@ -158,6 +158,35 @@ class RepsolCostsSource(CostsSource):
 
             if not download_elements:
                 self.logger.warning("No download elements found on the page")
+                # Debug: Let's try some alternative selectors
+                self.logger.debug("Trying alternative download selectors...")
+                
+                # Try different selectors
+                alt_selectors = [
+                    "//a[contains(@href, 'download')]",
+                    "//button[contains(text(), 'Download')]",
+                    "//*[contains(@class, 'download')]",
+                    "//*[contains(@id, 'download')]",
+                    "//a[contains(text(), 'PDF')]",
+                    "//button[contains(text(), 'PDF')]",
+                ]
+                
+                for selector in alt_selectors:
+                    try:
+                        elements = self.browser.driver.find_elements(By.XPATH, selector)
+                        if elements:
+                            self.logger.debug(f"Found {len(elements)} elements with selector: {selector}")
+                    except Exception as e:
+                        self.logger.debug(f"Selector failed: {selector}, error: {e}")
+                
+                # Get page source for debugging
+                page_source = self.browser.driver.page_source
+                self.logger.debug(f"Page source length: {len(page_source)}")
+                if "Descargar" in page_source:
+                    self.logger.debug("Found 'Descargar' text in page source")
+                if "download" in page_source.lower():
+                    self.logger.debug("Found 'download' text in page source")
+                
                 return
 
             # Create artifacts directory if it doesn't exist
