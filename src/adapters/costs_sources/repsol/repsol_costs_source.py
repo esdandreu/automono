@@ -19,7 +19,7 @@ import pdfplumber
 from src.core.domain.invoice import Invoice
 from src.core.ports.costs_source import CostsSource
 from src.core.ports.logger import Logger
-from src.core.ports.browser import Browser, By
+from src.core.ports.browser import Browser, By, WebElement
 
 
 class RepsolConfig(Protocol):
@@ -82,9 +82,10 @@ class RepsolCostsSource(CostsSource):
             )
             facturas_link.click()
 
-            # Wait for the invoices page to load
-            self.browser.wait_for_element(By.TAG_NAME, "body", timeout=30)
-            time.sleep(2)  # Give the page time to load completely
+            # Wait for the invoices page to load - wait for h1 with "Facturas" text
+            self.browser.wait_for_element_with_text(
+                By.TAG_NAME, "h1", "Facturas", timeout=30
+            )
 
             # Try to download new invoices first
             for file_path in self._download_invoices():
@@ -144,50 +145,30 @@ class RepsolCostsSource(CostsSource):
         login_button.click()
         self.logger.info("Successfully logged into Repsol customer portal")
 
+    def _get_download_buttons(self) -> list[WebElement]:
+        """Get all download buttons."""
+        # Wait for "Hogares" label to be present. Meaning that the facturas
+        # page is loaded.
+        self.browser.wait_for_element_with_text(By.TAG_NAME, "label", "Hogares")
+        # Get all buttons.
+        all_buttons = self.browser.driver.find_elements(By.CSS_SELECTOR, "button")
+        # Filter by text content.
+        return [
+            button
+            for button in all_buttons
+            if "Descargar" in button.get_attribute("innerText")
+        ]
+
     def _download_invoices(self) -> Iterator[Path]:
         """Generator that downloads invoice files one by one to the artifacts directory."""
         try:
+
+            # Wait for "Hogares" label to be present
+
             self.logger.info("Starting to download Repsol invoices")
 
-            # Find all download links on the page
-            download_elements = self.browser.driver.find_elements(
-                By.XPATH,
-                "//*[contains(text(), 'Descargar') or contains(text(), 'descargar')]",
-            )
-            self.logger.info("Found download elements", count=len(download_elements))
-
-            if not download_elements:
-                self.logger.warning("No download elements found on the page")
-                # Debug: Let's try some alternative selectors
-                self.logger.debug("Trying alternative download selectors...")
-                
-                # Try different selectors
-                alt_selectors = [
-                    "//a[contains(@href, 'download')]",
-                    "//button[contains(text(), 'Download')]",
-                    "//*[contains(@class, 'download')]",
-                    "//*[contains(@id, 'download')]",
-                    "//a[contains(text(), 'PDF')]",
-                    "//button[contains(text(), 'PDF')]",
-                ]
-                
-                for selector in alt_selectors:
-                    try:
-                        elements = self.browser.driver.find_elements(By.XPATH, selector)
-                        if elements:
-                            self.logger.debug(f"Found {len(elements)} elements with selector: {selector}")
-                    except Exception as e:
-                        self.logger.debug(f"Selector failed: {selector}, error: {e}")
-                
-                # Get page source for debugging
-                page_source = self.browser.driver.page_source
-                self.logger.debug(f"Page source length: {len(page_source)}")
-                if "Descargar" in page_source:
-                    self.logger.debug("Found 'Descargar' text in page source")
-                if "download" in page_source.lower():
-                    self.logger.debug("Found 'download' text in page source")
-                
-                return
+            len_download_buttons = len(self._get_download_buttons())
+            self.logger.info("Found download elements", count=len_download_buttons)
 
             # Create artifacts directory if it doesn't exist
             if not self.artifacts_dir:
@@ -201,14 +182,16 @@ class RepsolCostsSource(CostsSource):
             repsol_dir.mkdir(exist_ok=True)
 
             # Download each invoice one by one
-            for i, download_element in enumerate(download_elements):
+            for i in range(len_download_buttons):
                 try:
+                    download_button = self._get_download_buttons()[i]
+
                     self.logger.info(
-                        "Downloading invoice", index=i + 1, total=len(download_elements)
+                        "Downloading invoice", index=i + 1, total=len_download_buttons
                     )
 
                     # Click the download element
-                    download_element.click()
+                    download_button.click()
 
                     # Wait a moment for the download to start
                     time.sleep(1)

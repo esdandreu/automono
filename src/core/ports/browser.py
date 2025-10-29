@@ -47,6 +47,11 @@ class Browser(Protocol):
         pass
     
     @abstractmethod
+    def wait_for_element_with_text(self, by: By, value: str, text: str, timeout: int = 10) -> WebElement:
+        """Wait for an element to contain specific text."""
+        pass
+    
+    @abstractmethod
     def get_download_dir(self) -> Path:
         """Get the download directory path."""
         pass

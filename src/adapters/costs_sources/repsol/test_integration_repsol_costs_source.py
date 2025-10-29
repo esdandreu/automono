@@ -14,4 +14,3 @@ def test_repsol_costs_source(config, browser, logger, artifacts_dir):
         invoice_count += 1
         if invoice_count >= 3:  # Process first 3 invoices
             break
-    print("test_repsol_costs_source finished")

@@ -116,6 +116,14 @@ class SeleniumBrowser:
         wait = WebDriverWait(self.driver, timeout)
         return wait.until(EC.element_to_be_clickable((by, value)))
     
+    def wait_for_element_with_text(self, by: By, value: str, text: str, timeout: int = 10) -> WebElement:
+        """Wait for an element to contain specific text."""
+        if self.driver is None:
+            raise RuntimeError("WebDriver is not started")
+        
+        wait = WebDriverWait(self.driver, timeout)
+        return wait.until(EC.text_to_be_present_in_element((by, value), text))
+    
     def get_download_dir(self) -> Path:
         """Get the download directory path."""
         if self.download_dir is None:
