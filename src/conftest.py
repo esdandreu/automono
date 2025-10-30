@@ -3,17 +3,26 @@ Shared fixtures for the invoice automation tests.
 """
 
 import pytest
+import os
 from pathlib import Path
 from collections import namedtuple
+from dotenv import load_dotenv
 from src.adapters.browser.selenium import SeleniumBrowser
 from src.adapters.config.environment_config import Env, get_env_str
 from src.adapters.logger.simple import SimpleLogger
+from scripts.encrypt_test_data import decrypt_file
 
 
 @pytest.fixture(scope="session")
 def project_root():
     """Return the project root directory."""
-    return Path(__file__).parent
+    return Path(__file__).parent.parent
+
+
+@pytest.fixture(scope="session")
+def load_env(project_root):
+    """Load environment variables from .env file in project root."""
+    load_dotenv(dotenv_path=project_root / ".env")
 
 
 @pytest.fixture(scope="session")
@@ -62,6 +71,41 @@ def browser(config, logger):
     # Cleanup: ensure browser is stopped after test
     browser_instance.stop()
 
+
+@pytest.fixture(scope="function")
+def repsol_test_password(load_env):
+    """Get the password for decrypting Repsol test data."""
+    return os.getenv('REPSOL_PASSWORD')
+
+@pytest.fixture(scope="function")
+def decrypt_test_data(tmp_path):
+    """Decrypt a file to a temporary file in pytest's temporary directory.
+    
+    Returns a function that decrypts a file and returns the path to the
+    decrypted file. The decrypted file will be automatically cleaned up after
+    the test executes.
+    """
+    def _decrypt(encrypted_file_path: Path, password: str) -> Path:
+        """Decrypt a file to a temporary location.
+        
+        Args:
+            encrypted_file_path: Path to the encrypted file
+            password: Password for decryption
+            
+        Returns:
+            Path to the decrypted temporary file
+        """
+        # Create a temporary file in pytest's tmp_path (automatically cleaned up)
+        # Use the encrypted file's name with a prefix to avoid conflicts
+        encrypted_path = Path(encrypted_file_path)
+        temp_output = tmp_path / f"{encrypted_path.name}.decrypted"
+        
+        # Decrypt the file
+        decrypt_file(encrypted_file_path, temp_output, password)
+        
+        return temp_output
+    
+    return _decrypt
 
 def pytest_addoption(parser):
     """Add custom command line options."""

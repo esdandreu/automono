@@ -403,8 +403,11 @@ class RepsolCostsSource(CostsSource):
         # Look for IVA (VAT) amount specifically
         iva_patterns = [
             r"IVA[:\s]*(\d+[.,]\d{2})",  # IVA: 12.34
+            r"IVA[:\s]*€\s*(\d+[.,]\d{2})",  # IVA: €12.34
             r"(\d+[.,]\d{2})\s*IVA",  # 12.34 IVA
+            r"€\s*(\d+[.,]\d{2})\s*IVA",  # €12.34 IVA
             r"21%[:\s]*(\d+[.,]\d{2})",  # 21%: 12.34
+            r"21%[:\s]*€\s*(\d+[.,]\d{2})",  # 21%: €12.34
         ]
 
         iva_amount = Decimal("0.00")
