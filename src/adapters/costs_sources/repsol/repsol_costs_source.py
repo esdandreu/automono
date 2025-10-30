@@ -40,9 +40,9 @@ class RepsolCostsSource(CostsSource):
     """Adapter for fetching electricity invoices from Repsol."""
 
     # Provider-specific configuration
-    CONCEPT: Final[str] = "Electricity"
-    TYPE: Final[str] = "Monthly Bill"
-    DEDUCTIBLE_PERCENTAGE: Final[float] = 1.0  # 100% deductible for business
+    CONCEPT: Final[str] = "Luz Repsol"
+    TYPE: Final[str] = "Suministros"
+    DEDUCTIBLE_PERCENTAGE: Final[float] = 0.24*0.3*0.9  
 
     # URLs
     INVOICES_URL: Final[str] = "https://areacliente.repsol.es/mis-facturas"
@@ -227,7 +227,7 @@ class RepsolCostsSource(CostsSource):
             self.logger.error("Failed to download invoices", error=str(e))
             raise
 
-    def _extract_metadata_from_pdf_file(self, file_path: str) -> Invoice:
+    def _extract_metadata_from_pdf_file(self, path: str) -> Invoice:
         """
         Extract metadata from a Repsol PDF invoice file and create an Invoice object.
 
@@ -242,7 +242,7 @@ class RepsolCostsSource(CostsSource):
         """
         try:
             # Read the PDF file
-            with open(file_path, "rb") as f:
+            with open(path, "rb") as f:
                 content = f.read()
 
             # Extract text from PDF
@@ -254,24 +254,19 @@ class RepsolCostsSource(CostsSource):
             # Extract cost amounts
             cost_euros, iva_euros = self._extract_amounts(text)
 
-            # Create invoice object
-            file_name = Path(file_path).name
-
             invoice = Invoice(
                 invoice_date=invoice_date,
-                concept="Electricity",  # Default value, will be overridden by caller
-                type="Electricity",  # Default value, will be overridden by caller
+                concept=self.CONCEPT,
+                type=self.TYPE,
                 cost_euros=cost_euros,
                 iva_euros=iva_euros,
-                deductible_percentage=0,  # Will be set by the caller
-                file_name=file_name,
-                path=str(file_path),
+                deductible_percentage=self.DEDUCTIBLE_PERCENTAGE,
+                path=path,
             )
 
-            self.logger.info(
+            self.logger.debug(
                 "Successfully extracted metadata from Repsol PDF file",
-                file_path=file_path,
-                file_name=file_name,
+                path=path,
                 invoice_date=invoice_date.isoformat(),
                 cost_euros=float(cost_euros),
                 iva_euros=float(iva_euros),
@@ -282,7 +277,7 @@ class RepsolCostsSource(CostsSource):
         except Exception as e:
             self.logger.error(
                 "Failed to extract metadata from Repsol PDF file",
-                file_path=file_path,
+                path=path,
                 error=str(e),
             )
             raise ValueError(f"Failed to extract metadata from Repsol PDF file: {e}")
@@ -314,121 +309,71 @@ class RepsolCostsSource(CostsSource):
             raise ValueError(f"Failed to extract text from Repsol PDF: {e}")
 
     def _extract_invoice_date(self, text: str) -> datetime:
-        """Extract invoice date from Repsol invoice text."""
-        # Common date patterns in Spanish invoices
-        date_patterns = [
-            r"(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})",  # DD/MM/YYYY or DD-MM-YYYY
-            r"(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})",  # YYYY/MM/DD or YYYY-MM-DD
-        ]
-
-        for pattern in date_patterns:
-            match = re.search(pattern, text)
-            if match:
-                if len(match.group(1)) == 4:  # YYYY/MM/DD format
-                    year, month, day = match.groups()
-                else:  # DD/MM/YYYY format
-                    day, month, year = match.groups()
-
-                try:
-                    return datetime(int(year), int(month), int(day))
-                except ValueError:
-                    continue
-
-        # Try Spanish month names
-        spanish_months = {
-            "enero": 1,
-            "febrero": 2,
-            "marzo": 3,
-            "abril": 4,
-            "mayo": 5,
-            "junio": 6,
-            "julio": 7,
-            "agosto": 8,
-            "septiembre": 9,
-            "octubre": 10,
-            "noviembre": 11,
-            "diciembre": 12,
-        }
-
-        for month_name, month_num in spanish_months.items():
-            pattern = rf"(\d{{1,2}})\s+{month_name}\s+(\d{{4}})"
-            match = re.search(pattern, text, re.IGNORECASE)
-            if match:
-                day, year = match.groups()
-                try:
-                    return datetime(int(year), month_num, int(day))
-                except ValueError:
-                    continue
-
-        # If no date found, use current date as fallback
-        self.logger.warning(
-            "Could not extract invoice date from PDF, using current date"
+        """Extract invoice date from Repsol invoice text.
+        
+        Looks for "Fecha de emisión" (emission date) pattern.
+        
+        Raises:
+            ValueError: If the date pattern cannot be found or parsed.
+        """
+        fecha_emision_pattern = (
+            r"Fecha de emisión\s+(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})"
         )
-        return datetime.now()
+        match = re.search(fecha_emision_pattern, text, re.IGNORECASE)
+        if not match:
+            raise ValueError(
+                "Could not find 'Fecha de emisión' pattern in invoice PDF"
+            )
+        
+        day, month, year = match.groups()
+        try:
+            return datetime(int(year), int(month), int(day))
+        except ValueError as e:
+            raise ValueError(
+                f"Could not parse invoice date from PDF: {day}/{month}/{year}"
+            ) from e
 
     def _extract_amounts(self, text: str) -> tuple[Decimal, Decimal]:
-        """Extract cost and IVA amounts from Repsol invoice text."""
-        # Look for amounts with Euro symbol
-        amount_patterns = [
-            r"(\d+[.,]\d{2})\s*€",  # 123.45€
-            r"€\s*(\d+[.,]\d{2})",  # €123.45
-            r"(\d+[.,]\d{2})\s*EUR",  # 123.45 EUR
-        ]
-
-        amounts = []
-        for pattern in amount_patterns:
-            matches = re.findall(pattern, text, re.IGNORECASE)
-            for match in matches:
-                try:
-                    # Clean and convert amount
-                    amount_str = match.replace(",", ".")
-                    amount = Decimal(amount_str)
-                    if amount > 0:  # Only positive amounts
-                        amounts.append(amount)
-                except (ValueError, InvalidOperation):
-                    continue
-
-        if not amounts:
-            self.logger.warning(
-                "Could not extract amounts from PDF, using default values"
+        """Extract cost and IVA amounts from Repsol invoice text.
+        
+        Looks for:
+        - Total amount: "Total factura X,XX €" pattern
+        - IVA amount: "IVA (21 %) de X,XX Y,YY €" pattern
+        
+        Raises:
+            ValueError: If the amount patterns cannot be found or parsed.
+        """
+        # Extract IVA amount from pattern: "IVA (21 %) de 50,02 10,50 €"
+        iva_pattern = r"IVA\s*\(21\s*%\)\s*de\s*\d+[.,]\d+\s+(\d+[.,]\d+)\s*€"
+        iva_match = re.search(iva_pattern, text, re.IGNORECASE)
+        if not iva_match:
+            raise ValueError(
+                "Could not find IVA amount pattern 'IVA (21 %) de X,XX Y,YY €' in invoice PDF"
             )
-            return Decimal("0.00"), Decimal("0.00")
+        
+        try:
+            iva_str = iva_match.group(1).replace(",", ".")
+            iva_amount = Decimal(iva_str)
+        except (ValueError, InvalidOperation) as e:
+            raise ValueError(
+                f"Could not parse IVA amount from PDF: {iva_match.group(1)}"
+            ) from e
 
-        # Sort amounts in descending order
-        amounts.sort(reverse=True)
-
-        # Assume the largest amount is the total cost
-        total_cost = amounts[0]
-
-        # Look for IVA (VAT) amount specifically
-        iva_patterns = [
-            r"IVA[:\s]*(\d+[.,]\d{2})",  # IVA: 12.34
-            r"IVA[:\s]*€\s*(\d+[.,]\d{2})",  # IVA: €12.34
-            r"(\d+[.,]\d{2})\s*IVA",  # 12.34 IVA
-            r"€\s*(\d+[.,]\d{2})\s*IVA",  # €12.34 IVA
-            r"21%[:\s]*(\d+[.,]\d{2})",  # 21%: 12.34
-            r"21%[:\s]*€\s*(\d+[.,]\d{2})",  # 21%: €12.34
-        ]
-
-        iva_amount = Decimal("0.00")
-        for pattern in iva_patterns:
-            match = re.search(pattern, text, re.IGNORECASE)
-            if match:
-                try:
-                    iva_str = match.group(1).replace(",", ".")
-                    iva_amount = Decimal(iva_str)
-                    break
-                except (ValueError, InvalidOperation):
-                    continue
-
-        # If no specific IVA found, calculate it (assuming 21% Spanish VAT)
-        if iva_amount == 0 and len(amounts) >= 2:
-            # Second largest amount might be the base amount
-            base_amount = amounts[1]
-            iva_amount = total_cost - base_amount
-        elif iva_amount == 0:
-            # Calculate 21% of total as IVA
-            iva_amount = total_cost * Decimal("0.21")
+        # Extract total invoice amount from pattern: "Total factura X,XX €"
+        total_pattern = r"Total factura\s+(\d+[.,]\d+)\s*€"
+        total_match = re.search(total_pattern, text, re.IGNORECASE)
+        if not total_match:
+            raise ValueError(
+                "Could not find total amount pattern 'Total factura X,XX €' in invoice PDF"
+            )
+        
+        try:
+            total_str = total_match.group(1).replace(",", ".")
+            total_cost = Decimal(total_str)
+        except (ValueError, InvalidOperation) as e:
+            raise ValueError(
+                f"Could not parse total amount from PDF: {total_match.group(1)}"
+            ) from e
 
         return total_cost, iva_amount
 

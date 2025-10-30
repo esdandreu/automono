@@ -98,7 +98,7 @@ def decrypt_test_data(tmp_path):
         # Create a temporary file in pytest's tmp_path (automatically cleaned up)
         # Use the encrypted file's name with a prefix to avoid conflicts
         encrypted_path = Path(encrypted_file_path)
-        temp_output = tmp_path / f"{encrypted_path.name}.decrypted"
+        temp_output: Path = tmp_path / f"{encrypted_path.name}.decrypted"
         
         # Decrypt the file
         decrypt_file(encrypted_file_path, temp_output, password)

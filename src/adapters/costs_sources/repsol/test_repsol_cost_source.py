@@ -4,6 +4,7 @@ Unit tests for Repsol costs source.
 These tests use encrypted test data to avoid exposing real invoice information.
 """
 
+from decimal import Decimal
 from pathlib import Path
 import datetime
 from unittest.mock import Mock
@@ -12,7 +13,7 @@ from src.adapters.costs_sources.repsol.repsol_costs_source import RepsolCostsSou
 from src.core.domain.invoice import Invoice
 
 
-def test_extract_metadata_from_real_pdf(
+def test_extract_metadata_from_pdf_file(
     logger, decrypt_test_data, repsol_test_password
 ):
     """Test metadata extraction using real encrypted test PDFs."""
@@ -37,6 +38,6 @@ def test_extract_metadata_from_real_pdf(
     assert invoice.invoice_date == datetime.datetime(2025, 10, 28)
     assert invoice.concept == "Luz Repsol"
     assert invoice.type == "Suministros"
-    assert invoice.cost_euros == 60.52
-    assert invoice.iva_euros == 10.50
-    assert invoice.file_path == temp_pdf_path
+    assert invoice.cost_euros == Decimal("60.52")
+    assert invoice.iva_euros == Decimal("10.50")
+    assert invoice.path == temp_pdf_path
